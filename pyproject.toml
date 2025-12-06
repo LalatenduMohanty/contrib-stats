@@ -1,0 +1,196 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "contrib-stats"
+version = "0.1.0"
+description = "CLI tool to analyze contributor activity and code review metrics across GitLab and GitHub"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Lalatendu Mohanty"}
+]
+maintainers = [
+    {name = "Lalatendu Mohanty"}
+]
+keywords = [
+    "git",
+    "github",
+    "gitlab",
+    "pull-request",
+    "merge-request",
+    "code-review",
+    "statistics",
+    "analytics",
+    "contributor",
+    "cli",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Utilities",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/LalatenduMohanty/contrib-stats"
+Documentation = "https://github.com/LalatenduMohanty/contrib-stats#readme"
+Repository = "https://github.com/LalatenduMohanty/contrib-stats.git"
+Issues = "https://github.com/LalatenduMohanty/contrib-stats/issues"
+Changelog = "https://github.com/LalatenduMohanty/contrib-stats/blob/main/CHANGELOG.md"
+
+[project.scripts]
+contrib-stats = "contrib_stats.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contrib_stats"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+]
+
+# Default environment
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "pytest --cov=src/contrib_stats --cov-report=term-missing {args:tests}"
+
+# Linting environment
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+    "ruff>=0.1.0",
+]
+
+[tool.hatch.envs.lint.scripts]
+check = "ruff check src tests"
+fix = "ruff check --fix src tests"
+format = "ruff format src tests"
+format-check = "ruff format --check src tests"
+all = [
+    "check",
+    "format-check",
+]
+
+# Type checking environment
+[tool.hatch.envs.types]
+dependencies = [
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+    "pytest>=7.0.0",
+]
+
+[tool.hatch.envs.types.scripts]
+check = "mypy src tests"
+
+# Combined check environment
+[tool.hatch.envs.check]
+detached = true
+dependencies = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+    "pytest>=7.0.0",
+]
+
+[tool.hatch.envs.check.scripts]
+all = [
+    "ruff check src tests",
+    "ruff format --check src tests",
+    "mypy src tests",
+]
+fix = [
+    "ruff check --fix src tests",
+    "ruff format src tests",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults
+    "B905",   # zip strict
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["contrib_stats"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/contrib_stats"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
