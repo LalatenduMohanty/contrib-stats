@@ -9,30 +9,66 @@ A CLI tool to analyze contributor activity, code review metrics, and repository 
 ## Vision
 
 Provide comprehensive insights into repository health and team productivity through:
-- **Review metrics** - Who reviews the most? How fast?
+- **Review metrics** - Who reviews the most? Who approves the most?
 - **Contributor metrics** - Who contributes the most? PR volume?
 - **Release metrics** - Release frequency, commits per release
 - **Activity trends** - Daily/weekly/monthly patterns
 
 ---
 
-## Current Features (v0.1.0)
+## Release History
 
-- [x] GitLab merge request analysis
-- [x] GitHub pull request analysis
-- [x] Count unique MRs/PRs per reviewer
-- [x] Multi-threaded API fetching
-- [x] Date range filtering
-- [x] CLI arguments with validation
-- [x] Environment variable support
-- [x] Interactive mode
-- [x] Text file output
+| Version | Date | Highlights |
+|---------|------|------------|
+| v0.1.0 | Dec 2025 | Initial release with basic review metrics |
+| v0.1.1 | Dec 2025 | Bug fixes and improvements |
+| v1.2.0 | Dec 2025 | Approval tracking, JSON/CSV output, error handling |
 
 ---
 
-## Planned Features
+## Current Release (v1.2.0) ✅
 
-### Phase 1: PR/MR Contribution Metrics (v0.2.0)
+### Core Review Metrics
+- [x] GitLab merge request analysis
+- [x] GitHub pull request analysis
+- [x] Count unique MRs/PRs per commenter
+- [x] Count unique MRs/PRs per approver
+- [x] Multi-threaded API fetching
+- [x] Date range filtering
+- [x] Exclude self-comments and self-approvals
+- [x] Exclude bot comments
+
+### CLI Features
+- [x] CLI arguments with validation
+- [x] Environment variable support
+- [x] Interactive mode with prompts
+- [x] `--debug` flag for troubleshooting
+
+### Output Formats
+- [x] Text file output (default)
+- [x] JSON output (`--format json`)
+- [x] CSV output (`--format csv`)
+- [x] Separate CSV files per metric with timestamps
+- [x] `--output-dir` for CSV directory
+
+### Error Handling
+- [x] User-friendly error messages
+- [x] Specific handling for 401, 403, 404, 429 errors
+- [x] Custom exception classes
+
+### Development & Quality
+- [x] Hatch-based project management
+- [x] pytest test suite with coverage
+- [x] mypy type checking
+- [x] ruff linting and formatting
+- [x] GitHub Actions CI pipeline
+- [x] Automated release workflow with wheel/sdist artifacts
+
+---
+
+## Planned Releases
+
+### Phase 1: PR/MR Contribution Metrics (v1.3.0)
 
 #### PR/MR Author Statistics
 - [ ] **PRs per author** - Who sent the most PRs/MRs
@@ -48,7 +84,7 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **Time to first review** - PR responsiveness
 - [ ] **Time to merge** - End-to-end PR lifecycle
 
-### Phase 2: Release Metrics (v0.3.0)
+### Phase 2: Release Metrics (v1.4.0)
 
 #### Release Statistics
 - [ ] **Releases per week/month** - Release cadence
@@ -58,14 +94,12 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **Contributors per release** - Team involvement
 - [ ] **Release timeline visualization** - Gantt-style view
 
-### Phase 3: Review Metrics (v0.4.0)
+### Phase 3: Enhanced Review Metrics (v1.5.0)
 
-#### Reviewer Statistics
-- [ ] **Reviews per reviewer** - Review volume (current feature)
+#### Advanced Reviewer Statistics
 - [ ] **Review response time** - Time to first review comment
 - [ ] **Review turnaround** - Time from review to merge
 - [ ] **Comments per review** - Review depth/engagement
-- [ ] **Approval rate** - % of reviews that approve
 
 #### Review Health
 - [ ] **Review coverage** - % of PRs that got reviewed
@@ -73,7 +107,7 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **Review bottlenecks** - PRs waiting for review
 - [ ] **Reviewer load balance** - Distribution of reviews
 
-### Phase 4: Commit Metrics (v0.5.0)
+### Phase 4: Commit Metrics (v1.6.0)
 
 #### Commit Statistics
 - [ ] **Commits per author** - Contribution volume
@@ -88,7 +122,20 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **Hotspot files** - Most frequently changed files
 - [ ] **Code ownership** - Who owns which parts
 
-### Phase 5: Team & Organization (v0.6.0)
+### Phase 5: Output & Visualization (v1.7.0)
+
+#### Additional Output Formats
+- [ ] **HTML report** (`--format html`) - Beautiful dashboard
+- [ ] **Markdown tables** (`--format markdown`)
+- [ ] **Terminal charts** - ASCII bar charts
+
+#### Dashboards
+- [ ] **Summary dashboard** - Key metrics at a glance
+- [ ] **Trend charts** - Activity over time
+- [ ] **Leaderboards** - Top contributors/reviewers
+- [ ] **Calendar heatmap** - GitHub-style contribution graph
+
+### Phase 6: Team & Organization (v1.8.0)
 
 #### Team Features
 - [ ] **Team grouping** - Define teams, aggregate by team
@@ -101,22 +148,7 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **Organization-wide stats** - Aggregate across org
 - [ ] **Project grouping** - Group related repos
 
-### Phase 6: Output & Visualization (v0.7.0)
-
-#### Output Formats
-- [ ] **JSON output** (`--format json`)
-- [ ] **CSV output** (`--format csv`)
-- [ ] **HTML report** (`--format html`) - Beautiful dashboard
-- [ ] **Markdown tables** (`--format markdown`)
-- [ ] **Terminal charts** - ASCII bar charts
-
-#### Dashboards
-- [ ] **Summary dashboard** - Key metrics at a glance
-- [ ] **Trend charts** - Activity over time
-- [ ] **Leaderboards** - Top contributors/reviewers
-- [ ] **Calendar heatmap** - GitHub-style contribution graph
-
-### Phase 7: Integrations (v0.8.0)
+### Phase 7: Integrations (v1.9.0)
 
 #### Notifications
 - [ ] **Slack integration** - Post reports to Slack
@@ -129,7 +161,7 @@ Provide comprehensive insights into repository health and team productivity thro
 - [ ] **DataDog integration** - APM integration
 - [ ] **Custom metrics endpoint** - REST API for metrics
 
-### Phase 8: Distribution (v1.0.0)
+### Phase 8: Distribution & Packaging (v2.0.0)
 
 - [ ] **PyPI package** (`pip install contrib-stats`)
 - [ ] **Docker image** (`docker run contrib-stats`)
@@ -141,7 +173,23 @@ Provide comprehensive insights into repository health and team productivity thro
 
 ## CLI Design
 
-### Commands Structure
+### Current Options
+
+```bash
+--provider, -p      # gitlab, github (required)
+--project-id        # Project identifier (required)
+--token             # Access token (required)
+--start-date        # Start date YYYY-MM-DD
+--end-date          # End date YYYY-MM-DD
+--format, -f        # Output format: text, json, csv
+--output, -o        # Output file path (text/json)
+--output-dir, -d    # Output directory (csv)
+--workers, -w       # Parallel threads (1-50)
+--no-interactive    # Skip prompts
+--debug             # Show stack traces
+```
+
+### Future Commands Structure
 
 ```bash
 # Review statistics (current)
@@ -166,99 +214,11 @@ contrib-stats report --provider github --project-id owner/repo --token xxx
 contrib-stats summary --provider gitlab --project-id group/project --token xxx
 ```
 
-### Common Options
-
-```bash
---provider, -p      # gitlab, github (required)
---project-id        # Project identifier (required)
---token             # Access token (required)
---start-date        # Start date YYYY-MM-DD
---end-date          # End date YYYY-MM-DD
---format, -f        # Output format: text, json, csv, html, markdown
---output, -o        # Output file path
---workers, -w       # Parallel threads (1-50)
---no-interactive    # Skip prompts
---verbose, -v       # Verbose output
---config            # Config file path
-```
-
-### Example Outputs
-
-#### Contributors Summary
-```
-================================================================================
-CONTRIBUTOR STATISTICS
-================================================================================
-
-Period: 2025-01-01 to 2025-06-01
-Total PRs: 234
-Total Contributors: 18
-
---------------------------------------------------------------------------------
-TOP CONTRIBUTORS (by PRs merged)
---------------------------------------------------------------------------------
-Rank   Username            PRs Opened   PRs Merged   Merge Rate
---------------------------------------------------------------------------------
-1      alice               45           42           93%
-2      bob                 38           35           92%
-3      charlie             29           25           86%
-```
-
-#### Release Summary
-```
-================================================================================
-RELEASE STATISTICS
-================================================================================
-
-Period: 2025-01-01 to 2025-06-01
-Total Releases: 12
-Average Time Between Releases: 12.5 days
-Average Commits Per Release: 47
-
---------------------------------------------------------------------------------
-RECENT RELEASES
---------------------------------------------------------------------------------
-Version     Date          Commits    PRs    Contributors
---------------------------------------------------------------------------------
-v2.5.0      2025-05-28    52         15     8
-v2.4.1      2025-05-15    23         7      5
-v2.4.0      2025-05-01    61         18     12
-```
-
-#### Activity Summary
-```
-================================================================================
-REPOSITORY ACTIVITY SUMMARY
-================================================================================
-
-Period: 2025-01-01 to 2025-06-01
-
-PRs/MRs:
-  Opened: 234
-  Merged: 198 (85%)
-  Closed: 36 (15%)
-  Avg Time to Merge: 2.3 days
-
-Reviews:
-  Total Reviews: 512
-  Reviewers: 15
-  Avg Reviews per PR: 2.6
-
-Releases:
-  Total: 12
-  Frequency: ~2 per month
-
-Top Contributors:        Top Reviewers:
-1. alice (42 PRs)       1. david (89 reviews)
-2. bob (35 PRs)         2. eve (76 reviews)
-3. charlie (25 PRs)     3. frank (54 reviews)
-```
-
 ---
 
 ## Configuration File
 
-Support a `.contrib-stats.yaml` config file:
+Support a `.contrib-stats.yaml` config file (planned):
 
 ```yaml
 # .contrib-stats.yaml
@@ -307,62 +267,57 @@ reports:
 
 ## Technical Architecture
 
-### Proposed Project Structure
+### Current Project Structure
 
 ```
 contrib-stats/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml              # CI pipeline
+│       └── release.yml         # Release automation
 ├── src/
 │   └── contrib_stats/
 │       ├── __init__.py
 │       ├── __main__.py
-│       ├── cli.py                 # Main CLI entry point
-│       ├── config.py              # Configuration handling
+│       ├── cli.py              # Main CLI entry point
+│       ├── exceptions.py       # Custom exceptions
 │       │
-│       ├── providers/             # API providers
+│       ├── providers/          # API providers
 │       │   ├── __init__.py
-│       │   ├── base.py            # Abstract base provider
-│       │   ├── gitlab.py          # GitLab API
-│       │   └── github.py          # GitHub API
-│       │
-│       ├── analyzers/             # Metric analyzers
-│       │   ├── __init__.py
-│       │   ├── reviews.py         # Review statistics
-│       │   ├── contributors.py    # Contributor statistics
-│       │   ├── releases.py        # Release statistics
-│       │   ├── commits.py         # Commit statistics
-│       │   └── prs.py             # PR/MR statistics
-│       │
-│       ├── formatters/            # Output formatters
-│       │   ├── __init__.py
-│       │   ├── text.py
-│       │   ├── json.py
-│       │   ├── csv.py
-│       │   ├── html.py
-│       │   └── markdown.py
+│       │   ├── base.py         # Abstract base provider
+│       │   ├── gitlab.py       # GitLab API
+│       │   └── github.py       # GitHub API
 │       │
 │       └── utils/
 │           ├── __init__.py
-│           ├── validation.py
-│           ├── dates.py
-│           └── threading.py
+│           └── validation.py   # Input validation
 │
 ├── tests/
-├── docs/
-├── templates/                     # HTML report templates
-│   └── report.html.jinja2
+│   ├── __init__.py
+│   ├── conftest.py             # Pytest fixtures
+│   ├── test_exceptions.py
+│   ├── test_providers.py
+│   └── test_validation.py
+│
 ├── pyproject.toml
 ├── README.md
 ├── ROADMAP.md
-├── CHANGELOG.md
-├── LICENSE
-└── .contrib-stats.yaml.example
+└── LICENSE
 ```
 
 ---
 
 ## Metric Definitions
 
-### PR/MR Metrics
+### Review Metrics (v1.2.0 ✅)
+| Metric | Definition |
+|--------|------------|
+| MRs/PRs Commented | Unique MRs/PRs a user commented on |
+| MRs/PRs Approved | Unique MRs/PRs a user approved |
+| Total Comments | Total comment count across all reviews |
+| Total Approvals | Total approval count |
+
+### PR/MR Metrics (v1.3.0)
 | Metric | Definition |
 |--------|------------|
 | PRs Opened | Number of PRs created in period |
@@ -372,15 +327,7 @@ contrib-stats/
 | Time to Merge | Time from PR open to merge |
 | Time to First Review | Time from PR open to first review |
 
-### Review Metrics
-| Metric | Definition |
-|--------|------------|
-| Reviews Given | Unique PRs a user commented on |
-| Review Comments | Total comments across all reviews |
-| Approval Rate | Reviews with approval / Total reviews |
-| Review Coverage | PRs with reviews / Total PRs |
-
-### Release Metrics
+### Release Metrics (v1.4.0)
 | Metric | Definition |
 |--------|------------|
 | Release Frequency | Releases per time period |
@@ -388,7 +335,7 @@ contrib-stats/
 | Commits per Release | Commits between release tags |
 | PRs per Release | PRs merged between releases |
 
-### Contributor Metrics
+### Contributor Metrics (v1.6.0)
 | Metric | Definition |
 |--------|------------|
 | Active Contributors | Users with merged PRs in period |
@@ -397,9 +344,9 @@ contrib-stats/
 
 ---
 
-## Priority Features for v0.2.0
+## Priority Features for v1.3.0
 
-Based on user request, prioritize these for the next release:
+Based on user requests, prioritize these for the next release:
 
 1. **PRs per author** - Who sent the most PRs
 2. **PRs merged per day/week** - Merge velocity

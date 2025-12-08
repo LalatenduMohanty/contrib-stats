@@ -46,3 +46,6 @@ contrib_stats_*.txt
 .env.local
 .secrets
 
+# Reports
+reports/
+

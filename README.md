@@ -29,10 +29,12 @@ pip install -e ".[dev]"
 ## What It Does
 
 - Supports both **GitLab** and **GitHub** providers
-- Counts unique MRs/PRs each user has reviewed (by commenting)
-- Filters for 2025 data (configurable via CLI)
-- Excludes system notes, bots, and self-reviews
-- Generates a ranked report of top reviewers
+- Tracks **reviewers** who commented on MRs/PRs
+- Tracks **approvers** who approved MRs/PRs
+- Filters by date range (configurable via CLI)
+- Excludes system notes, bots, and self-reviews/approvals
+- Generates ranked reports of top commenters and approvers
+- Multiple output formats: **Text**, **JSON**, **CSV**
 - Uses parallel threads for fast processing
 
 ## Prerequisites
@@ -42,7 +44,7 @@ pip install -e ".[dev]"
   - **GitLab**: `read_api` scope
   - **GitHub**: `repo` scope (private repos) or `public_repo` scope (public repos)
 
-### 2. Get Your Access Token
+### Get Your Access Token
 
 **GitLab:**
 1. Go to GitLab -> Settings -> Access Tokens
@@ -54,22 +56,20 @@ pip install -e ".[dev]"
 2. Generate new token with `repo` or `public_repo` scope
 3. Copy the token
 
-### 3. Find Your Project ID
+### Find Your Project ID
 
 - **GitLab**: `group/project` (e.g., `redhat/rhel-ai/builder`)
 - **GitHub**: `owner/repo` (e.g., `pytorch/pytorch`)
 
 ## Usage
 
-### GitLab
+### Basic Usage
 
 ```bash
+# GitLab
 contrib-stats --provider gitlab --project-id group/project --token your-token
-```
 
-### GitHub
-
-```bash
+# GitHub
 contrib-stats --provider github --project-id owner/repo --token your-token
 ```
 
@@ -83,8 +83,17 @@ contrib-stats --provider github --project-id owner/repo --token xxx \
 ### Save Results to File
 
 ```bash
+# Save as text file
 contrib-stats --provider gitlab --project-id group/project --token xxx \
   --output results.txt --no-interactive
+
+# Save as JSON
+contrib-stats --provider gitlab --project-id group/project --token xxx \
+  --output results.json --format json --no-interactive
+
+# Save as CSV files to a directory
+contrib-stats --provider github --project-id owner/repo --token xxx \
+  --output-dir ./reports --format csv --no-interactive
 ```
 
 ### Using Environment Variables
@@ -114,16 +123,17 @@ contrib-stats
 contrib-stats
 ```
 
+The script will prompt you for:
+- Provider (gitlab/github)
+- Project ID
+- Access token
+- Output format and location
+
 ### As a Python Module
 
 ```bash
 python -m contrib_stats --provider gitlab --project-id group/project --token xxx
 ```
-
-The script will prompt you for:
-- Provider (gitlab/github)
-- Project ID
-- Access token
 
 ## Command Line Options
 
@@ -135,9 +145,12 @@ The script will prompt you for:
 | `--url` | API URL (for self-hosted/enterprise) | auto |
 | `--start-date` | Start date (YYYY-MM-DD) | 2025-01-01 |
 | `--end-date` | End date (YYYY-MM-DD) | today |
-| `--output`, `-o` | Output file path | (none) |
+| `--output`, `-o` | Output file path (for text/json) | (none) |
+| `--output-dir`, `-d` | Output directory (for csv) | (none) |
+| `--format`, `-f` | Output format: `text`, `json`, `csv` | text |
 | `--no-interactive` | Skip prompts (for automation) | false |
 | `--workers`, `-w` | Number of parallel threads (1-50) | 10 |
+| `--debug` | Show full stack traces on errors | false |
 
 View all options:
 ```bash
@@ -149,80 +162,105 @@ Check version:
 contrib-stats --version
 ```
 
-## Input Validation
+## Output Formats
 
-The script validates all inputs:
+### Text Output (Default)
 
-- **Provider**: Must be `gitlab` or `github` (case-insensitive)
-- **Project ID**: Must contain `/` (e.g., `owner/repo`)
-- **Date**: Must be in `YYYY-MM-DD` format
-- **Workers**: Must be between 1 and 50
+Human-readable report saved to a single file.
+
+### JSON Output
+
+Machine-readable format with structured data:
+
+```json
+{
+  "metadata": {
+    "provider": "gitlab",
+    "mr_term": "MR",
+    "start_date": "2025-01-01",
+    "end_date": "2025-12-08",
+    "generated_at": "2025-12-08T16:05:30"
+  },
+  "summary": {
+    "total_mrs": 1077,
+    "total_comments": 2680,
+    "total_approvals": 856,
+    "total_reviewers": 42
+  },
+  "commenters": [
+    {"rank": 1, "username": "alice", "count": 272}
+  ],
+  "approvers": [
+    {"rank": 1, "username": "alice", "count": 189}
+  ]
+}
+```
+
+### CSV Output
+
+Separate CSV files for each metric, saved to a directory with timestamped filenames:
+
+```
+./reports/
+├── summary_20251208_160530.csv
+├── commenters_by_mrs_commented_20251208_160530.csv
+└── approvers_by_mrs_approved_20251208_160530.csv
+```
 
 ## Output Example
-
-### GitLab
 
 ```
 ================================================================================
 MR REVIEW STATISTICS
 ================================================================================
 
-Period: 2025-01-01 to 2025-12-06
-Total MRs: 456
-Total Review Comments: 2341
-Total Reviewers: 23
+Period: 2025-01-01 to 2025-12-08
+Total MRs: 1077
+Total Review Comments: 2680
+Total Approvals: 856
+Total Reviewers: 42
 
 --------------------------------------------------------------------------------
-TOP REVIEWERS (by unique MRs commented on)
+TOP COMMENTERS (by unique MRs commented on)
 --------------------------------------------------------------------------------
-Rank   Username                       MRs Commented  
+Rank   Username                       MRs Commented
 --------------------------------------------------------------------------------
-1      alice                          142            
-2      bob                            98             
-3      charlie                        76             
+1      alice                          272
+2      bob                            226
+3      charlie                        161
 ...
 
 --------------------------------------------------------------------------------
-Note: A reviewer is counted for each unique MR they commented on
-      (at least one comment). Self-comments by MR authors are excluded.
-================================================================================
-```
-
-### GitHub
-
-```
-================================================================================
-PR REVIEW STATISTICS
-================================================================================
-
-Period: 2025-01-01 to 2025-12-06
-Total PRs: 289
-Total Review Comments: 1523
-Total Reviewers: 45
-
+TOP APPROVERS (by unique MRs approved)
 --------------------------------------------------------------------------------
-TOP REVIEWERS (by unique PRs commented on)
+Rank   Username                       MRs Approved
 --------------------------------------------------------------------------------
-Rank   Username                       PRs Commented  
---------------------------------------------------------------------------------
-1      alice                          89             
-2      bob                            67             
-3      charlie                        54             
+1      alice                          189
+2      bob                            156
+3      charlie                        98
 ...
 
 --------------------------------------------------------------------------------
-Note: A reviewer is counted for each unique PR they commented on
-      (at least one comment). Self-comments by PR authors are excluded.
+Notes:
+  - Commenters: Users who commented on at least one MR (excluding self-comments)
+  - Approvers: Users who approved at least one MR (excluding self-approvals)
 ================================================================================
 ```
 
-## How Reviewers Are Counted
+## How Metrics Are Counted
 
-A person is counted as a "reviewer" for a MR/PR if they have made **at least one comment** on it. The tool counts:
+### Commenters
+- Users who made **at least one comment** on a MR/PR
+- Each MR/PR is counted only once per person
+- Self-comments (by MR/PR author) are excluded
+- Bot comments are excluded
 
-- **Unique MRs/PRs per reviewer**: Each MR/PR is counted only once per person, regardless of how many comments they made
-- **Self-comments excluded**: Comments by the MR/PR author on their own MR/PR are not counted
-- **Bots excluded**: Comments from bot accounts (e.g., CI bots) are filtered out
+### Approvers
+- Users who **approved** a MR/PR
+- Each MR/PR is counted only once per person
+- Self-approvals are excluded
+- GitLab: Uses the approvals API
+- GitHub: Counts reviews with `APPROVED` state
 
 ## GitHub Comment Types
 
@@ -243,17 +281,21 @@ For GitHub, the script counts comments from:
 - Ensure you have access to the repository
 - For private repos, ensure your token has appropriate permissions
 
-### Rate Limiting
+### Access Forbidden (403)
+- Check you have permission to access the project
+- Verify organization policies aren't blocking access
+
+### Rate Limiting (429)
 - GitLab: ~120 requests/minute for authenticated users
 - GitHub: 5000 requests/hour for authenticated users
 - Reduce workers with `--workers 5` if you hit rate limits
-- The script uses parallel threads (default: 10) for faster processing
 
-### Invalid Provider Error
-- Provider must be exactly `gitlab` or `github` (case-insensitive)
+### Debug Mode
 
-### Invalid Date Format
-- Dates must be in `YYYY-MM-DD` format (e.g., `2025-01-15`)
+Use `--debug` flag to see full stack traces:
+```bash
+contrib-stats --provider gitlab --project-id group/project --token xxx --debug
+```
 
 ## Advanced: Schedule Automatic Reports
 
@@ -263,20 +305,22 @@ For GitHub, the script counts comments from:
 # Edit crontab
 crontab -e
 
-# Run every Monday at 9 AM for GitLab
-0 9 * * 1 python /path/to/review_stats.py \
+# Run every Monday at 9 AM - save as CSV
+0 9 * * 1 contrib-stats \
   --provider gitlab \
   --project-id your/project \
   --token your-token \
-  --output /path/to/gitlab_stats_$(date +\%Y\%m\%d).txt \
+  --output-dir /path/to/reports \
+  --format csv \
   --no-interactive
 
-# Run every Monday at 9 AM for GitHub
-0 9 * * 1 python /path/to/review_stats.py \
+# Run every Monday at 9 AM - save as JSON
+0 9 * * 1 contrib-stats \
   --provider github \
   --project-id owner/repo \
   --token your-token \
-  --output /path/to/github_stats_$(date +\%Y\%m\%d).txt \
+  --output /path/to/reports/stats_$(date +\%Y\%m\%d).json \
+  --format json \
   --no-interactive
 ```
 
@@ -286,6 +330,26 @@ crontab -e
 - Use environment variables for tokens in automation
 - Rotate tokens regularly
 - Use tokens with minimal required permissions
+
+## Development
+
+### Running Tests
+
+```bash
+hatch run test
+```
+
+### Running Linting and Type Checks
+
+```bash
+hatch run check:all
+```
+
+### Fixing Linting Issues
+
+```bash
+hatch run check:fix
+```
 
 ## Roadmap
 

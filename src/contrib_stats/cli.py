@@ -1,6 +1,8 @@
 """Command-line interface for contrib_stats."""
 
 import argparse
+import csv
+import json
 import os
 import sys
 from datetime import datetime
@@ -18,6 +20,17 @@ from contrib_stats.utils.validation import (
     validate_provider,
     validate_workers,
 )
+
+# Valid output formats
+VALID_FORMATS = ("text", "csv", "json")
+
+
+def validate_format(value: str) -> str:
+    """Validate output format argument."""
+    value_lower = value.lower()
+    if value_lower not in VALID_FORMATS:
+        raise argparse.ArgumentTypeError(f"Invalid format '{value}'. Must be one of: {', '.join(VALID_FORMATS)}")
+    return value_lower
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,9 +51,17 @@ Examples:
   contrib-stats --provider github --project-id owner/repo --token xxx \\
     --start-date 2025-01-01 --end-date 2025-06-30
 
-  # Non-interactive with output file
+  # Save as text file
   contrib-stats --provider gitlab --project-id group/project --token xxx \\
     --output results.txt --no-interactive
+
+  # Save as JSON
+  contrib-stats --provider gitlab --project-id group/project --token xxx \\
+    --output results.json --format json --no-interactive
+
+  # Save as CSV files to a directory
+  contrib-stats --provider github --project-id owner/repo --token xxx \\
+    --output-dir ./reports --format csv --no-interactive
 
 Environment Variables:
   CONTRIB_STATS_PROVIDER     Provider (gitlab or github)
@@ -90,7 +111,19 @@ Environment Variables:
     parser.add_argument(
         "--output",
         "-o",
-        help="Output file path for detailed results",
+        help="Output file path for text/json format",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-d",
+        help="Output directory for CSV files (used with --format csv)",
+    )
+    parser.add_argument(
+        "--format",
+        "-f",
+        type=validate_format,
+        default="text",
+        help="Output format: 'text', 'csv', or 'json' (default: text)",
     )
     parser.add_argument(
         "--no-interactive",
@@ -112,17 +145,8 @@ Environment Variables:
     return parser.parse_args()
 
 
-def save_results(stats: dict[str, Any], start_date: str, end_date: str, output_file: str, mr_term: str) -> None:
-    """
-    Save detailed results to a file.
-
-    Args:
-        stats: Statistics dictionary
-        start_date: Start date of analysis
-        end_date: End date of analysis
-        output_file: Output file path
-        mr_term: MR or PR term
-    """
+def save_results_text(stats: dict[str, Any], start_date: str, end_date: str, output_file: str, mr_term: str) -> None:
+    """Save results in text format."""
     with open(output_file, "w") as f:
         f.write("=" * 80 + "\n")
         f.write(f"{mr_term} REVIEW STATISTICS - DETAILED REPORT\n")
@@ -159,7 +183,144 @@ def save_results(stats: dict[str, Any], start_date: str, end_date: str, output_f
         f.write(f"  - Commenters: Users who commented on at least one {mr_term} (excluding self-comments)\n")
         f.write(f"  - Approvers: Users who approved at least one {mr_term} (excluding self-approvals)\n")
         f.write("=" * 80 + "\n")
-    print(f"[OK] Results saved to: {output_file}")
+
+
+def save_results_json(
+    stats: dict[str, Any], start_date: str, end_date: str, output_file: str, mr_term: str, provider: str
+) -> None:
+    """Save results in JSON format."""
+    # Build JSON-serializable data
+    output_data = {
+        "metadata": {
+            "provider": provider,
+            "mr_term": mr_term,
+            "start_date": start_date,
+            "end_date": end_date,
+            "generated_at": datetime.now().isoformat(),
+        },
+        "summary": {
+            "total_mrs": stats["total_mrs"],
+            "total_comments": stats["total_comments"],
+            "total_approvals": stats["total_approvals"],
+            "total_reviewers": stats["total_reviewers"],
+        },
+        "commenters": [
+            {"rank": i + 1, "username": username, "count": count}
+            for i, (username, count) in enumerate(stats["commenters"])
+        ],
+        "approvers": [
+            {"rank": i + 1, "username": username, "count": count}
+            for i, (username, count) in enumerate(stats["approvers"])
+        ],
+    }
+
+    with open(output_file, "w") as f:
+        json.dump(output_data, f, indent=2)
+
+
+def save_results_csv(
+    stats: dict[str, Any],
+    start_date: str,
+    end_date: str,
+    output_dir: str,
+    mr_term: str,
+    provider: str,
+) -> list[str]:
+    """
+    Save results in CSV format with separate files for each metric.
+
+    Creates CSV files with timestamped names:
+    - summary_YYYYMMDD_HHMMSS.csv - Overall statistics
+    - commenters_by_mrs_commented_YYYYMMDD_HHMMSS.csv - Commenter rankings
+    - approvers_by_mrs_approved_YYYYMMDD_HHMMSS.csv - Approver rankings
+
+    Args:
+        stats: Statistics dictionary
+        start_date: Start date of analysis
+        end_date: End date of analysis
+        output_dir: Output directory path
+        mr_term: MR or PR term
+        provider: Provider name
+
+    Returns:
+        List of created file paths
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    mr_term_lower = mr_term.lower()
+    created_files: list[str] = []
+
+    # Summary CSV
+    summary_file = os.path.join(output_dir, f"summary_{timestamp}.csv")
+    with open(summary_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Provider", provider])
+        writer.writerow(["MR/PR Term", mr_term])
+        writer.writerow(["Start Date", start_date])
+        writer.writerow(["End Date", end_date])
+        writer.writerow(["Generated At", datetime.now().isoformat()])
+        writer.writerow([f"Total {mr_term}s", stats["total_mrs"]])
+        writer.writerow(["Total Comments", stats["total_comments"]])
+        writer.writerow(["Total Approvals", stats["total_approvals"]])
+        writer.writerow(["Total Reviewers", stats["total_reviewers"]])
+    created_files.append(summary_file)
+
+    # Commenters CSV - users who commented on MRs/PRs
+    commenters_file = os.path.join(output_dir, f"commenters_by_{mr_term_lower}s_commented_{timestamp}.csv")
+    with open(commenters_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Rank", "Username", f"{mr_term}s_Commented"])
+        for rank, (username, count) in enumerate(stats["commenters"], 1):
+            writer.writerow([rank, username, count])
+    created_files.append(commenters_file)
+
+    # Approvers CSV - users who approved MRs/PRs
+    approvers_file = os.path.join(output_dir, f"approvers_by_{mr_term_lower}s_approved_{timestamp}.csv")
+    with open(approvers_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Rank", "Username", f"{mr_term}s_Approved"])
+        for rank, (username, count) in enumerate(stats["approvers"], 1):
+            writer.writerow([rank, username, count])
+    created_files.append(approvers_file)
+
+    return created_files
+
+
+def save_results(
+    stats: dict[str, Any],
+    start_date: str,
+    end_date: str,
+    output_path: str,
+    mr_term: str,
+    provider: str,
+    output_format: str,
+) -> None:
+    """
+    Save detailed results to file(s).
+
+    Args:
+        stats: Statistics dictionary
+        start_date: Start date of analysis
+        end_date: End date of analysis
+        output_path: Output file path (text/json) or directory (csv)
+        mr_term: MR or PR term
+        provider: Provider name (gitlab or github)
+        output_format: Output format (text, csv, json)
+    """
+    if output_format == "json":
+        save_results_json(stats, start_date, end_date, output_path, mr_term, provider)
+        print(f"[OK] Results saved to: {output_path}")
+    elif output_format == "csv":
+        created_files = save_results_csv(stats, start_date, end_date, output_path, mr_term, provider)
+        print(f"[OK] CSV files saved to directory: {output_path}")
+        for file_path in created_files:
+            print(f"  - {os.path.basename(file_path)}")
+    else:
+        save_results_text(stats, start_date, end_date, output_path, mr_term)
+        print(f"[OK] Results saved to: {output_path}")
 
 
 def main() -> None:
@@ -253,13 +414,37 @@ def main() -> None:
         stats = analyzer.analyze_reviews(start_date, end_date)
         analyzer.print_report(stats, start_date, end_date)
 
-        if args.output:
-            save_results(stats, start_date, end_date, args.output, analyzer.mr_term)
+        # Determine output path based on format
+        output_format = args.format
+        # For CSV, use output_dir or output as directory; for text/json, use output as file path
+        output_path = args.output_dir or args.output if args.format == "csv" else args.output
+
+        if output_path:
+            save_results(stats, start_date, end_date, output_path, analyzer.mr_term, provider, output_format)
         elif not args.no_interactive:
             print("\nWant to save detailed results to a file? (y/n): ", end="")
             if input().strip().lower() == "y":
-                output_file = f"contrib_stats_{provider}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                save_results(stats, start_date, end_date, output_file, analyzer.mr_term)
+                print("Select format:")
+                print("  1. text")
+                print("  2. json")
+                print("  3. csv")
+                fmt_choice = input("Enter choice (1, 2, 3, or name): ").strip().lower()
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                if fmt_choice == "2" or fmt_choice == "json":
+                    output_format = "json"
+                    output_path = f"contrib_stats_{provider}_{timestamp}.json"
+                elif fmt_choice == "3" or fmt_choice == "csv":
+                    output_format = "csv"
+                    output_path = input("Enter output directory (default: ./reports): ").strip()
+                    if not output_path:
+                        output_path = "./reports"
+                else:
+                    output_format = "text"
+                    output_path = f"contrib_stats_{provider}_{timestamp}.txt"
+
+                save_results(stats, start_date, end_date, output_path, analyzer.mr_term, provider, output_format)
 
     except KeyboardInterrupt:
         print("\n\n[WARN] Analysis interrupted by user.")
