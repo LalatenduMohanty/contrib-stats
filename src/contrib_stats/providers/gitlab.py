@@ -3,6 +3,8 @@
 from typing import Any
 from urllib.parse import quote
 
+import requests
+
 from contrib_stats.providers.base import ReviewAnalyzer
 
 
@@ -91,6 +93,40 @@ class GitLabAnalyzer(ReviewAnalyzer):
         url = f"{self.api_base}/projects/{encoded_project_id}/merge_requests/{mr_iid}/notes"
         params = {"sort": "asc", "order_by": "created_at"}
         return self.get_paginated_data(url, params, silent=silent)
+
+    def get_mr_approvals(self, mr_iid: int) -> list[str]:
+        """
+        Get list of usernames who approved the merge request.
+
+        Args:
+            mr_iid: Merge request IID
+
+        Returns:
+            List of usernames who approved
+        """
+        encoded_project_id = quote(str(self.project_id), safe="")
+        url = f"{self.api_base}/projects/{encoded_project_id}/merge_requests/{mr_iid}/approvals"
+
+        try:
+            response = self.session.get(url)
+            if not response.ok:
+                return []
+
+            data = response.json()
+            approvers: list[str] = []
+
+            # Extract usernames from approved_by list
+            approved_by = data.get("approved_by", [])
+            for approval in approved_by:
+                user = approval.get("user", {})
+                username = user.get("username")
+                if username:
+                    approvers.append(str(username))
+
+            return approvers
+
+        except requests.exceptions.RequestException:
+            return []
 
     def _get_mr_identifier(self, mr: dict[str, Any]) -> int:
         """Get the merge request IID."""

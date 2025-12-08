@@ -131,7 +131,8 @@ class GitHubAnalyzer(ReviewAnalyzer):
         except requests.exceptions.RequestException:
             pass
 
-        # 3. Get reviews (approve/request changes/comment)
+        # 3. Get reviews (approve/request changes/comment) - but NOT for approval counting
+        # We include these as comments for the comment count
         reviews_url = f"{self.base_url}/repos/{self.project_id}/pulls/{pr_number}/reviews"
         try:
             reviews = self.get_paginated_data(reviews_url, {}, silent=True)
@@ -142,6 +143,38 @@ class GitHubAnalyzer(ReviewAnalyzer):
             pass
 
         return all_comments
+
+    def get_mr_approvals(self, pr_number: int) -> list[str]:
+        """
+        Get list of usernames who approved the pull request.
+
+        Args:
+            pr_number: Pull request number
+
+        Returns:
+            List of usernames who approved
+        """
+        reviews_url = f"{self.base_url}/repos/{self.project_id}/pulls/{pr_number}/reviews"
+
+        try:
+            reviews = self.get_paginated_data(reviews_url, {}, silent=True)
+            approvers: list[str] = []
+
+            for review in reviews:
+                # Only count APPROVED state
+                if review.get("state") == "APPROVED":
+                    user = review.get("user")
+                    if user:
+                        username = user.get("login")
+                        # Skip bots
+                        if username and user.get("type") != "Bot":
+                            approvers.append(str(username))
+
+            # Return unique approvers (a user might approve multiple times after changes)
+            return list(set(approvers))
+
+        except requests.exceptions.RequestException:
+            return []
 
     def _get_mr_identifier(self, mr: dict[str, Any]) -> int:
         """Get the pull request number."""

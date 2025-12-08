@@ -66,6 +66,19 @@ class ReviewAnalyzer(ABC):
         pass
 
     @abstractmethod
+    def get_mr_approvals(self, mr_id: int) -> list[str]:
+        """
+        Get list of usernames who approved the merge/pull request.
+
+        Args:
+            mr_id: MR/PR identifier
+
+        Returns:
+            List of usernames who approved
+        """
+        pass
+
+    @abstractmethod
     def _get_mr_identifier(self, mr: dict[str, Any]) -> int:
         """Get the MR/PR identifier from the response."""
         pass
@@ -207,20 +220,21 @@ class ReviewAnalyzer(ABC):
         link_header = response.headers.get("Link", "")
         return 'rel="next"' in link_header
 
-    def _process_mr_notes(self, mr: dict[str, Any]) -> tuple[int, str, list[dict[str, Any]]]:
+    def _process_mr_data(self, mr: dict[str, Any]) -> tuple[int, str, list[dict[str, Any]], list[str]]:
         """
-        Fetch and return notes for a single MR/PR.
+        Fetch and return notes and approvals for a single MR/PR.
 
         Args:
             mr: Merge/pull request data
 
         Returns:
-            Tuple of (mr_id, mr_author, notes)
+            Tuple of (mr_id, mr_author, notes, approvers)
         """
         mr_id = self._get_mr_identifier(mr)
         mr_author = self._get_mr_author(mr)
         notes = self.get_mr_notes(mr_id, silent=True)
-        return mr_id, mr_author, notes
+        approvers = self.get_mr_approvals(mr_id)
+        return mr_id, mr_author, notes, approvers
 
     def analyze_reviews(self, start_date: str, end_date: str | None = None) -> dict[str, Any]:
         """
@@ -241,21 +255,24 @@ class ReviewAnalyzer(ABC):
 
         print(f"\nAnalyzing {len(merge_requests)} {self.mr_term}s using {self.max_workers} threads...")
 
-        user_reviewed_mrs: dict[str, set[int]] = defaultdict(set)
+        user_commented_mrs: dict[str, set[int]] = defaultdict(set)
+        user_approved_mrs: dict[str, set[int]] = defaultdict(set)
         total_comments = 0
+        total_approvals = 0
         completed = 0
         errors = 0
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_mr = {executor.submit(self._process_mr_notes, mr): mr for mr in merge_requests}
+            future_to_mr = {executor.submit(self._process_mr_data, mr): mr for mr in merge_requests}
 
             for future in as_completed(future_to_mr):
                 mr = future_to_mr[future]
                 completed += 1
 
                 try:
-                    mr_id, mr_author, notes = future.result()
+                    mr_id, mr_author, notes, approvers = future.result()
 
+                    # Process comments
                     for note in notes:
                         username = self._get_note_author(note)
                         if username is None:
@@ -263,8 +280,15 @@ class ReviewAnalyzer(ABC):
 
                         # Skip if the commenter is the MR/PR author (self-review)
                         if username != mr_author:
-                            user_reviewed_mrs[username].add(mr_id)
+                            user_commented_mrs[username].add(mr_id)
                             total_comments += 1
+
+                    # Process approvals
+                    for approver in approvers:
+                        # Skip if the approver is the MR/PR author (self-approval)
+                        if approver != mr_author:
+                            user_approved_mrs[approver].add(mr_id)
+                            total_approvals += 1
 
                 except Exception as e:
                     errors += 1
@@ -281,15 +305,32 @@ class ReviewAnalyzer(ABC):
 
         print("\n[OK] Analysis complete!")
 
-        review_counts = {username: len(mr_set) for username, mr_set in user_reviewed_mrs.items()}
-        sorted_reviewers = sorted(review_counts.items(), key=lambda x: x[1], reverse=True)
+        # Calculate comment counts
+        comment_counts = {username: len(mr_set) for username, mr_set in user_commented_mrs.items()}
+        sorted_commenters = sorted(comment_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Calculate approval counts
+        approval_counts = {username: len(mr_set) for username, mr_set in user_approved_mrs.items()}
+        sorted_approvers = sorted(approval_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Combine for total unique MRs reviewed (commented OR approved)
+        all_reviewers: dict[str, set[int]] = defaultdict(set)
+        for username, mr_set in user_commented_mrs.items():
+            all_reviewers[username].update(mr_set)
+        for username, mr_set in user_approved_mrs.items():
+            all_reviewers[username].update(mr_set)
 
         return {
             "total_mrs": len(merge_requests),
             "total_comments": total_comments,
-            "total_reviewers": len(sorted_reviewers),
-            "reviewers": sorted_reviewers,
-            "user_reviewed_mrs": user_reviewed_mrs,
+            "total_approvals": total_approvals,
+            "total_reviewers": len(all_reviewers),
+            "commenters": sorted_commenters,
+            "approvers": sorted_approvers,
+            "user_commented_mrs": user_commented_mrs,
+            "user_approved_mrs": user_approved_mrs,
+            # Legacy field for backward compatibility
+            "reviewers": sorted_commenters,
         }
 
     def print_report(self, stats: dict[str, Any], start_date: str, end_date: str | None = None) -> None:
@@ -300,21 +341,40 @@ class ReviewAnalyzer(ABC):
         print(f"\nPeriod: {start_date} to {end_date or datetime.now().strftime('%Y-%m-%d')}")
         print(f"Total {self.mr_term}s: {stats['total_mrs']}")
         print(f"Total Review Comments: {stats['total_comments']}")
+        print(f"Total Approvals: {stats['total_approvals']}")
         print(f"Total Reviewers: {stats['total_reviewers']}")
 
+        # Commenters section
         print("\n" + "-" * 80)
-        print(f"TOP REVIEWERS (by unique {self.mr_term}s commented on)")
+        print(f"TOP COMMENTERS (by unique {self.mr_term}s commented on)")
         print("-" * 80)
         print(f"{'Rank':<6} {'Username':<30} {self.mr_term + 's Commented':<15}")
         print("-" * 80)
 
-        for rank, (username, count) in enumerate(stats["reviewers"][:20], 1):
+        for rank, (username, count) in enumerate(stats["commenters"][:20], 1):
             print(f"{rank:<6} {username:<30} {count:<15}")
 
-        if len(stats["reviewers"]) > 20:
-            print(f"\n... and {len(stats['reviewers']) - 20} more reviewers")
+        if len(stats["commenters"]) > 20:
+            print(f"\n... and {len(stats['commenters']) - 20} more commenters")
+
+        # Approvers section
+        print("\n" + "-" * 80)
+        print(f"TOP APPROVERS (by unique {self.mr_term}s approved)")
+        print("-" * 80)
+        print(f"{'Rank':<6} {'Username':<30} {self.mr_term + 's Approved':<15}")
+        print("-" * 80)
+
+        if stats["approvers"]:
+            for rank, (username, count) in enumerate(stats["approvers"][:20], 1):
+                print(f"{rank:<6} {username:<30} {count:<15}")
+
+            if len(stats["approvers"]) > 20:
+                print(f"\n... and {len(stats['approvers']) - 20} more approvers")
+        else:
+            print("(No approvals found)")
 
         print("\n" + "-" * 80)
-        print("Note: A reviewer is counted for each unique " + self.mr_term + " they commented on")
-        print("      (at least one comment). Self-comments by " + self.mr_term + " authors are excluded.")
+        print("Notes:")
+        print(f"  - Commenters: Users who commented on at least one {self.mr_term} (excluding self-comments)")
+        print(f"  - Approvers: Users who approved at least one {self.mr_term} (excluding self-approvals)")
         print("=" * 80)

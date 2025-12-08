@@ -130,17 +130,34 @@ def save_results(stats: dict[str, Any], start_date: str, end_date: str, output_f
         f.write(f"\nPeriod: {start_date} to {end_date}\n")
         f.write(f"Total {mr_term}s: {stats['total_mrs']}\n")
         f.write(f"Total Review Comments: {stats['total_comments']}\n")
+        f.write(f"Total Approvals: {stats['total_approvals']}\n")
         f.write(f"Total Reviewers: {stats['total_reviewers']}\n\n")
+
+        # Commenters section
         f.write("-" * 80 + "\n")
-        f.write(f"TOP REVIEWERS (by unique {mr_term}s commented on)\n")
+        f.write(f"TOP COMMENTERS (by unique {mr_term}s commented on)\n")
         f.write("-" * 80 + "\n")
         f.write(f"{'Rank':<6} {'Username':<30} {mr_term + 's Commented':<15}\n")
         f.write("-" * 80 + "\n")
-        for rank, (username, count) in enumerate(stats["reviewers"], 1):
+        for rank, (username, count) in enumerate(stats["commenters"], 1):
             f.write(f"{rank:<6} {username:<30} {count:<15}\n")
+
+        # Approvers section
         f.write("\n" + "-" * 80 + "\n")
-        f.write(f"Note: A reviewer is counted for each unique {mr_term} they commented on\n")
-        f.write(f"      (at least one comment). Self-comments by {mr_term} authors are excluded.\n")
+        f.write(f"TOP APPROVERS (by unique {mr_term}s approved)\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"{'Rank':<6} {'Username':<30} {mr_term + 's Approved':<15}\n")
+        f.write("-" * 80 + "\n")
+        if stats["approvers"]:
+            for rank, (username, count) in enumerate(stats["approvers"], 1):
+                f.write(f"{rank:<6} {username:<30} {count:<15}\n")
+        else:
+            f.write("(No approvals found)\n")
+
+        f.write("\n" + "-" * 80 + "\n")
+        f.write("Notes:\n")
+        f.write(f"  - Commenters: Users who commented on at least one {mr_term} (excluding self-comments)\n")
+        f.write(f"  - Approvers: Users who approved at least one {mr_term} (excluding self-approvals)\n")
         f.write("=" * 80 + "\n")
     print(f"[OK] Results saved to: {output_file}")
 
