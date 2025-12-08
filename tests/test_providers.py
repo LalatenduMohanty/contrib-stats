@@ -17,6 +17,11 @@ class TestGitLabAnalyzer:
         analyzer = GitLabAnalyzer("group/project", "fake-token")
         assert analyzer.mr_term == "MR"
 
+    def test_provider_name(self):
+        """Test GitLab provider name."""
+        analyzer = GitLabAnalyzer("group/project", "fake-token")
+        assert analyzer.provider_name == "gitlab"
+
     def test_default_url(self):
         """Test default GitLab URL."""
         analyzer = GitLabAnalyzer("group/project", "fake-token")
@@ -71,6 +76,11 @@ class TestGitHubAnalyzer:
         """Test GitHub PR term is 'PR'."""
         analyzer = GitHubAnalyzer("owner/repo", "fake-token")
         assert analyzer.mr_term == "PR"
+
+    def test_provider_name(self):
+        """Test GitHub provider name."""
+        analyzer = GitHubAnalyzer("owner/repo", "fake-token")
+        assert analyzer.provider_name == "github"
 
     def test_default_url(self):
         """Test default GitHub URL."""

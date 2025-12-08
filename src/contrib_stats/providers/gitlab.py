@@ -44,6 +44,11 @@ class GitLabAnalyzer(ReviewAnalyzer):
         """GitLab uses 'MR' for merge requests."""
         return "MR"
 
+    @property
+    def provider_name(self) -> str:
+        """Return the provider name."""
+        return "gitlab"
+
     def get_merge_requests(self, start_date: str, end_date: str | None = None) -> list[dict[str, Any]]:
         """
         Get all merge requests within date range.

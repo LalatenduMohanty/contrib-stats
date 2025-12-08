@@ -11,6 +11,14 @@ from typing import Any
 
 import requests
 
+from contrib_stats.exceptions import (
+    APIError,
+    AuthenticationError,
+    ForbiddenError,
+    ProjectNotFoundError,
+    RateLimitError,
+)
+
 
 class ReviewAnalyzer(ABC):
     """Abstract base class for review analyzers."""
@@ -84,6 +92,41 @@ class ReviewAnalyzer(ABC):
         """Return the term for MR/PR (e.g., 'MR' or 'PR')."""
         pass
 
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        """Return the provider name (e.g., 'gitlab' or 'github')."""
+        pass
+
+    def _handle_http_error(self, response: requests.Response) -> None:
+        """
+        Handle HTTP errors and raise appropriate exceptions.
+
+        Args:
+            response: The HTTP response object
+
+        Raises:
+            AuthenticationError: For 401 errors
+            ForbiddenError: For 403 errors
+            ProjectNotFoundError: For 404 errors
+            RateLimitError: For 429 errors
+            APIError: For other HTTP errors
+        """
+        status_code = response.status_code
+
+        if status_code == 401:
+            raise AuthenticationError(self.provider_name)
+        elif status_code == 403:
+            raise ForbiddenError(self.project_id, self.provider_name)
+        elif status_code == 404:
+            raise ProjectNotFoundError(self.project_id, self.provider_name)
+        elif status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            retry_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+            raise RateLimitError(self.provider_name, retry_seconds)
+        else:
+            raise APIError(status_code, response.text[:200])
+
     def get_paginated_data(
         self, url: str, params: dict[str, Any] | None = None, silent: bool = False
     ) -> list[dict[str, Any]]:
@@ -97,6 +140,13 @@ class ReviewAnalyzer(ABC):
 
         Returns:
             List of all items across all pages
+
+        Raises:
+            AuthenticationError: For 401 errors
+            ForbiddenError: For 403 errors
+            ProjectNotFoundError: For 404 errors
+            RateLimitError: For 429 errors
+            APIError: For other HTTP errors
         """
         if params is None:
             params = {}
@@ -113,11 +163,20 @@ class ReviewAnalyzer(ABC):
 
             try:
                 response = self.session.get(url, params=params)
-                response.raise_for_status()
+
+                # Handle HTTP errors with user-friendly messages
+                if not response.ok:
+                    self._handle_http_error(response)
+
+            except requests.exceptions.ConnectionError as e:
+                raise APIError(0, f"Connection error: Unable to connect to {self.base_url}. {e}") from e
+            except requests.exceptions.Timeout as e:
+                raise APIError(0, f"Request timed out. {e}") from e
             except requests.exceptions.RequestException as e:
-                with self._print_lock:
-                    print(f"\n[ERROR] Error fetching data: {e}")
-                raise
+                # Re-raise our custom exceptions
+                if hasattr(e, "response") and e.response is not None:
+                    self._handle_http_error(e.response)
+                raise APIError(0, str(e)) from e
 
             data = response.json()
             if not data:
@@ -177,7 +236,7 @@ class ReviewAnalyzer(ABC):
         merge_requests = self.get_merge_requests(start_date, end_date)
 
         if not merge_requests:
-            print(f"[ERROR] No {self.mr_term}s found in the specified date range.")
+            print(f"[INFO] No {self.mr_term}s found in the specified date range.")
             sys.exit(0)
 
         print(f"\nAnalyzing {len(merge_requests)} {self.mr_term}s using {self.max_workers} threads...")
@@ -244,9 +303,9 @@ class ReviewAnalyzer(ABC):
         print(f"Total Reviewers: {stats['total_reviewers']}")
 
         print("\n" + "-" * 80)
-        print(f"TOP REVIEWERS (by number of {self.mr_term}s reviewed)")
+        print(f"TOP REVIEWERS (by unique {self.mr_term}s commented on)")
         print("-" * 80)
-        print(f"{'Rank':<6} {'Username':<30} {self.mr_term + 's Reviewed':<15}")
+        print(f"{'Rank':<6} {'Username':<30} {self.mr_term + 's Commented':<15}")
         print("-" * 80)
 
         for rank, (username, count) in enumerate(stats["reviewers"][:20], 1):
@@ -255,4 +314,7 @@ class ReviewAnalyzer(ABC):
         if len(stats["reviewers"]) > 20:
             print(f"\n... and {len(stats['reviewers']) - 20} more reviewers")
 
-        print("\n" + "=" * 80)
+        print("\n" + "-" * 80)
+        print("Note: A reviewer is counted for each unique " + self.mr_term + " they commented on")
+        print("      (at least one comment). Self-comments by " + self.mr_term + " authors are excluded.")
+        print("=" * 80)

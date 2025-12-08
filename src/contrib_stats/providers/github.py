@@ -51,6 +51,11 @@ class GitHubAnalyzer(ReviewAnalyzer):
         """GitHub uses 'PR' for pull requests."""
         return "PR"
 
+    @property
+    def provider_name(self) -> str:
+        """Return the provider name."""
+        return "github"
+
     def get_merge_requests(self, start_date: str, end_date: str | None = None) -> list[dict[str, Any]]:
         """
         Get all pull requests within date range.

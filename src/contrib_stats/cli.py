@@ -3,11 +3,11 @@
 import argparse
 import os
 import sys
-import traceback
 from datetime import datetime
 from typing import Any
 
 from contrib_stats import __version__
+from contrib_stats.exceptions import ContribStatsError
 from contrib_stats.providers.base import ReviewAnalyzer
 from contrib_stats.providers.github import GitHubAnalyzer
 from contrib_stats.providers.gitlab import GitLabAnalyzer
@@ -104,6 +104,11 @@ Environment Variables:
         default=10,
         help="Number of parallel threads (1-50, default: 10)",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show full stack traces on errors",
+    )
     return parser.parse_args()
 
 
@@ -124,11 +129,19 @@ def save_results(stats: dict[str, Any], start_date: str, end_date: str, output_f
         f.write("=" * 80 + "\n")
         f.write(f"\nPeriod: {start_date} to {end_date}\n")
         f.write(f"Total {mr_term}s: {stats['total_mrs']}\n")
-        f.write(f"Total Comments: {stats['total_comments']}\n\n")
-        f.write(f"Rank | Username                       | {mr_term}s Reviewed\n")
+        f.write(f"Total Review Comments: {stats['total_comments']}\n")
+        f.write(f"Total Reviewers: {stats['total_reviewers']}\n\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"TOP REVIEWERS (by unique {mr_term}s commented on)\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"{'Rank':<6} {'Username':<30} {mr_term + 's Commented':<15}\n")
         f.write("-" * 80 + "\n")
         for rank, (username, count) in enumerate(stats["reviewers"], 1):
-            f.write(f"{rank:4d} | {username:30s} | {count:5d}\n")
+            f.write(f"{rank:<6} {username:<30} {count:<15}\n")
+        f.write("\n" + "-" * 80 + "\n")
+        f.write(f"Note: A reviewer is counted for each unique {mr_term} they commented on\n")
+        f.write(f"      (at least one comment). Self-comments by {mr_term} authors are excluded.\n")
+        f.write("=" * 80 + "\n")
     print(f"[OK] Results saved to: {output_file}")
 
 
@@ -233,10 +246,28 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print("\n\n[WARN] Analysis interrupted by user.")
+        sys.exit(130)
+
+    except ContribStatsError as e:
+        # User-friendly error messages for known errors
+        print(f"\n[ERROR] {e}")
+        if args.debug:
+            import traceback
+
+            print("\n--- Debug Traceback ---")
+            traceback.print_exc()
         sys.exit(1)
+
     except Exception as e:
-        print(f"\n[ERROR] Error during analysis: {e}")
-        traceback.print_exc()
+        # Unexpected errors
+        print(f"\n[ERROR] An unexpected error occurred: {e}")
+        if args.debug:
+            import traceback
+
+            print("\n--- Debug Traceback ---")
+            traceback.print_exc()
+        else:
+            print("\nRun with --debug flag for full stack trace.")
         sys.exit(1)
 
 

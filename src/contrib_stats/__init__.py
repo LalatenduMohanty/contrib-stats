@@ -9,6 +9,14 @@ __version__ = "0.1.0"
 __author__ = "Lalatendu Mohanty"
 __email__ = ""
 
+from contrib_stats.exceptions import (
+    APIError,
+    AuthenticationError,
+    ContribStatsError,
+    ForbiddenError,
+    ProjectNotFoundError,
+    RateLimitError,
+)
 from contrib_stats.providers.base import ReviewAnalyzer
 from contrib_stats.providers.github import GitHubAnalyzer
 from contrib_stats.providers.gitlab import GitLabAnalyzer
@@ -17,5 +25,11 @@ __all__ = [
     "ReviewAnalyzer",
     "GitLabAnalyzer",
     "GitHubAnalyzer",
+    "ContribStatsError",
+    "AuthenticationError",
+    "ProjectNotFoundError",
+    "ForbiddenError",
+    "RateLimitError",
+    "APIError",
     "__version__",
 ]

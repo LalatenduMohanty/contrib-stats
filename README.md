@@ -173,14 +173,19 @@ Total Review Comments: 2341
 Total Reviewers: 23
 
 --------------------------------------------------------------------------------
-TOP REVIEWERS (by number of MRs reviewed)
+TOP REVIEWERS (by unique MRs commented on)
 --------------------------------------------------------------------------------
-Rank   Username                       MRs Reviewed   
+Rank   Username                       MRs Commented  
 --------------------------------------------------------------------------------
 1      alice                          142            
 2      bob                            98             
 3      charlie                        76             
 ...
+
+--------------------------------------------------------------------------------
+Note: A reviewer is counted for each unique MR they commented on
+      (at least one comment). Self-comments by MR authors are excluded.
+================================================================================
 ```
 
 ### GitHub
@@ -196,15 +201,28 @@ Total Review Comments: 1523
 Total Reviewers: 45
 
 --------------------------------------------------------------------------------
-TOP REVIEWERS (by number of PRs reviewed)
+TOP REVIEWERS (by unique PRs commented on)
 --------------------------------------------------------------------------------
-Rank   Username                       PRs Reviewed   
+Rank   Username                       PRs Commented  
 --------------------------------------------------------------------------------
 1      alice                          89             
 2      bob                            67             
 3      charlie                        54             
 ...
+
+--------------------------------------------------------------------------------
+Note: A reviewer is counted for each unique PR they commented on
+      (at least one comment). Self-comments by PR authors are excluded.
+================================================================================
 ```
+
+## How Reviewers Are Counted
+
+A person is counted as a "reviewer" for a MR/PR if they have made **at least one comment** on it. The tool counts:
+
+- **Unique MRs/PRs per reviewer**: Each MR/PR is counted only once per person, regardless of how many comments they made
+- **Self-comments excluded**: Comments by the MR/PR author on their own MR/PR are not counted
+- **Bots excluded**: Comments from bot accounts (e.g., CI bots) are filtered out
 
 ## GitHub Comment Types
 
