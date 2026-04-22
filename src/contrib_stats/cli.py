@@ -3,13 +3,17 @@
 import argparse
 import csv
 import json
+import logging
 import os
 import sys
 from datetime import datetime
 from typing import Any
 
 from contrib_stats import __version__
+from contrib_stats.aggregator import MultiProjectAggregator
+from contrib_stats.dashboard import PromotionDashboard
 from contrib_stats.exceptions import ContribStatsError
+from contrib_stats.promotion import PromotionTracker
 from contrib_stats.providers.base import ReviewAnalyzer
 from contrib_stats.providers.github import GitHubAnalyzer
 from contrib_stats.providers.gitlab import GitLabAnalyzer
@@ -99,8 +103,7 @@ Environment Variables:
     parser.add_argument(
         "--start-date",
         type=validate_date,
-        default="2025-01-01",
-        help="Start date in YYYY-MM-DD format (default: 2025-01-01)",
+        help="Start date in YYYY-MM-DD format (required)",
     )
     parser.add_argument(
         "--end-date",
@@ -141,6 +144,35 @@ Environment Variables:
         "--debug",
         action="store_true",
         help="Show full stack traces on errors",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="count",
+        default=0,
+        help="Increase log verbosity (-v=INFO, -vv=DEBUG)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["review", "promotion"],
+        default="review",
+        help="Mode: 'review' (single project) or 'promotion' (multi-project dashboard)",
+    )
+    parser.add_argument(
+        "--projects-file",
+        help="File with one GitLab project path per line (promotion mode only)",
+    )
+    parser.add_argument(
+        "--maintainers-file",
+        help="File with one maintainer username per line (promotion mode only)",
+    )
+    parser.add_argument(
+        "--maintainers",
+        help="Comma-separated list of known maintainer usernames (promotion mode only)",
+    )
+    parser.add_argument(
+        "--exclude-users",
+        help="Comma-separated list of usernames to exclude from analysis",
     )
     return parser.parse_args()
 
@@ -323,12 +355,141 @@ def save_results(
         print(f"[OK] Results saved to: {output_path}")
 
 
+def run_promotion_mode(args: argparse.Namespace) -> None:
+    """Run multi-project promotion tracking dashboard."""
+    token = args.token or os.environ.get("CONTRIB_STATS_TOKEN")
+    if not token:
+        if args.no_interactive:
+            print("\n[ERROR] --token is required in non-interactive mode.")
+            sys.exit(1)
+        print("\nEnter your GitLab personal access token (read_api scope):")
+        token = input("Token: ").strip()
+    if not token:
+        print("\n[ERROR] Token is required.")
+        sys.exit(1)
+
+    gitlab_url = args.url or os.environ.get("GITLAB_URL", "https://gitlab.com")
+
+    projects_file = args.projects_file or os.environ.get("CONTRIB_STATS_PROJECTS_FILE")
+    if projects_file:
+        with open(projects_file) as f:
+            project_ids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    elif args.project_id:
+        project_ids = [args.project_id]
+    else:
+        print("\n[ERROR] --projects-file or --project-id is required for promotion mode.")
+        print("        Provide a file with one project per line, or a single --project-id.")
+        sys.exit(1)
+
+    maintainers: list[str] = []
+    if args.maintainers_file:
+        with open(args.maintainers_file) as f:
+            maintainers = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    elif args.maintainers:
+        maintainers = [m.strip() for m in args.maintainers.split(",") if m.strip()]
+    elif os.environ.get("CONTRIB_STATS_MAINTAINERS"):
+        maintainers = [m.strip() for m in os.environ["CONTRIB_STATS_MAINTAINERS"].split(",") if m.strip()]
+
+    exclude_users: list[str] = []
+    if args.exclude_users:
+        exclude_users = [u.strip() for u in args.exclude_users.split(",") if u.strip()]
+
+    start_date = args.start_date
+    end_date = args.end_date
+    export_dir = args.output_dir or os.path.join(".", "promotion_export")
+
+    print("\nPromotion Tracking Mode")
+    print(f"  GitLab URL: {gitlab_url}")
+    print(f"  Projects: {len(project_ids)}")
+    if maintainers:
+        print(f"  Maintainers: {', '.join(maintainers)}")
+    if exclude_users:
+        print(f"  Excluding: {', '.join(exclude_users)}")
+    print(f"  Date range: {start_date} to {end_date}")
+    print(f"  Workers: {args.workers}")
+    print(f"  Export dir: {export_dir}")
+
+    try:
+        aggregator = MultiProjectAggregator(
+            project_ids,
+            token,
+            gitlab_url,
+            max_workers=args.workers,
+            exclude_users=exclude_users,
+            known_maintainers=maintainers,
+        )
+        user_data = aggregator.analyze_all(start_date, end_date)
+
+        if not user_data:
+            print("\n[INFO] No review activity found across any projects.")
+            return
+
+        exported = aggregator.export_comments(export_dir)
+        print(f"\n[OK] Exported {len(exported)} user comment files to {export_dir}")
+
+        tracker = PromotionTracker(known_maintainers=set(maintainers))
+        statuses = tracker.evaluate_all(user_data)
+
+        dashboard = PromotionDashboard()
+        output_format = args.format
+
+        if output_format == "json":
+            result = dashboard.render_json(statuses, user_data, start_date, end_date, len(project_ids))
+            if args.output:
+                with open(args.output, "w") as f:
+                    f.write(result)
+                print(f"\n[OK] JSON saved to: {args.output}")
+            else:
+                print(result)
+        else:
+            result = dashboard.render_text(statuses, user_data, start_date, end_date, len(project_ids))
+            if args.output:
+                with open(args.output, "w") as f:
+                    f.write(result)
+                print(f"\n[OK] Report saved to: {args.output}")
+
+    except KeyboardInterrupt:
+        print("\n\n[WARN] Analysis interrupted by user.")
+        sys.exit(130)
+    except ContribStatsError as e:
+        print(f"\n[ERROR] {e}")
+        if args.debug:
+            import traceback
+
+            traceback.print_exc()
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[ERROR] An unexpected error occurred: {e}")
+        if args.debug:
+            import traceback
+
+            traceback.print_exc()
+        else:
+            print("\nRun with --debug flag for full stack trace.")
+        sys.exit(1)
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     args = parse_args()
 
+    log_level = logging.WARNING
+    if args.verbose >= 2:
+        log_level = logging.DEBUG
+    elif args.verbose >= 1:
+        log_level = logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     print(f"Contrib Stats v{__version__} - Contributor & Review Analytics")
     print("=" * 80)
+
+    if args.mode == "promotion":
+        run_promotion_mode(args)
+        return
 
     # Configuration priority: CLI args > environment variables > interactive prompts
     provider = args.provider or os.environ.get("CONTRIB_STATS_PROVIDER")

@@ -48,4 +48,8 @@ contrib_stats_*.txt
 
 # Reports
 reports/
+*_report.md
+
+# Promotion export data (contains real user comments)
+promotion_export/
 
